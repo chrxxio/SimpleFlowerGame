@@ -63,21 +63,21 @@ public class RootController : MonoBehaviour
     }
 
     void DetectEdge(float input)
-    {
-        if (Mathf.Abs(input) < 0.1f) return;
-
-        // Snap angle to 90° blocks
-        float snapped = Mathf.Round(currentAngle / 90f) * 90f;
-
-        float difference = Mathf.Abs(currentAngle - snapped);
-
-        if (difference < 2f) // near edge
         {
-            // Trigger camera rotation
-            cameraController.TriggerEdgeRotation();
+            if (Mathf.Abs(input) < 0.1f) return;
 
-            // lock exactly to edge
-            currentAngle = snapped;
+            // Snap angle to 90° blocks
+            float snapped = Mathf.Round(currentAngle / 90f) * 90f;
+            float difference = Mathf.Abs(currentAngle - snapped);
+
+            if (difference < 2f) // near edge
+            {
+                float direction = Mathf.Sign(input); // ✅ FIX
+
+                cameraController.TriggerEdgeRotation(direction);
+
+                // lock exactly to edge
+                currentAngle = snapped;
+            }
         }
-    }
 }

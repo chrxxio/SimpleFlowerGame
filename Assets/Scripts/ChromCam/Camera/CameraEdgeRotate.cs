@@ -1,34 +1,35 @@
 using UnityEngine;
+using System;
 
 public class CameraEdgeRotate : MonoBehaviour
 {
-    public Transform target;
-    public Transform orbitCenter;
+    public Transform target;        // player/root
+    public Transform orbitCenter;   // LevelCenter
 
-    public float duration = 0.5f; // total time
+    public float duration = 0.4f;
     public float rotationAmount = 90f;
 
-    private float timer = 0f;
     private bool isRotating = false;
+    private float timer = 0f;
 
     private Quaternion startRot;
     private Quaternion endRot;
 
-    public System.Action onComplete;
+    public Action onComplete; 
 
-    public void TriggerRotation()
+    public void TriggerRotation(float direction)
     {
-        if (!target || !orbitCenter) return;
+        if (isRotating) return;
 
-        timer = 0f;
         isRotating = true;
+        timer = 0f;
 
         startRot = transform.rotation;
-
-        // compute target rotation (90° around Y)
-        endRot = Quaternion.Euler(0, rotationAmount, 0) * startRot;
-
-        enabled = true;
+        endRot = Quaternion.Euler(
+            0,
+            transform.eulerAngles.y + (rotationAmount * direction),
+            0
+        );
     }
 
     void Update()
@@ -36,27 +37,20 @@ public class CameraEdgeRotate : MonoBehaviour
         if (!isRotating) return;
 
         timer += Time.deltaTime;
-        float t = Mathf.Clamp01(timer / duration);
+        float t = timer / duration;
 
-        // ease in/out (smooth cinematic)
-        float smoothT = Mathf.SmoothStep(0, 1, t);
+        transform.RotateAround(
+            orbitCenter.position,
+            Vector3.up,
+            (rotationAmount / duration) * Time.deltaTime
+        );
 
-        Vector3 center = orbitCenter.position;
-
-        // rotate position around center
-        transform.RotateAround(center, Vector3.up, (rotationAmount * Time.deltaTime) / duration);
-
-        // smooth rotation
-        transform.rotation = Quaternion.Slerp(startRot, endRot, smoothT);
-
-        transform.LookAt(target.position + Vector3.up * 1.2f);
+        transform.LookAt(target);
 
         if (t >= 1f)
         {
             isRotating = false;
-            enabled = false;
-
-            onComplete?.Invoke();
+            onComplete?.Invoke(); 
         }
     }
 }
