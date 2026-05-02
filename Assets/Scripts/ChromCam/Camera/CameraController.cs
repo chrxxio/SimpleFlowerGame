@@ -40,10 +40,10 @@ public class CameraController : MonoBehaviour
         }
     }
 
-    public void TriggerEdgeRotation()
+    public void TriggerEdgeRotation(float direction)
     {
         SetState(CameraState.EdgeRotate);
-        edgeCam.TriggerRotation();
+        edgeCam.TriggerRotation(direction);
     }
 
     public void TriggerFlowerReveal()
