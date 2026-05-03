@@ -1,56 +1,40 @@
 using UnityEngine;
-using System;
 
 public class CameraEdgeRotate : MonoBehaviour
 {
-    public Transform target;        // player/root
-    public Transform orbitCenter;   // LevelCenter
-
+    public Transform orbitCenter;
     public float duration = 0.4f;
-    public float rotationAmount = 90f;
 
-    private bool isRotating = false;
-    private float timer = 0f;
+    private float timer;
+    private bool rotating;
+    private float targetAngle;
 
-    private Quaternion startRot;
-    private Quaternion endRot;
+    public bool IsFinished => !rotating;
 
-    public Action onComplete; 
-
-    public void TriggerRotation(float direction)
+    public void StartRotation(int direction)
     {
-        if (isRotating) return;
-
-        isRotating = true;
+        rotating = true;
         timer = 0f;
-
-        startRot = transform.rotation;
-        endRot = Quaternion.Euler(
-            0,
-            transform.eulerAngles.y + (rotationAmount * direction),
-            0
-        );
+        targetAngle = 90f * direction;
     }
 
     void Update()
     {
-        if (!isRotating) return;
+        if (!rotating) return;
 
-        timer += Time.deltaTime;
-        float t = timer / duration;
+        float step = (targetAngle / duration) * Time.deltaTime;
 
         transform.RotateAround(
             orbitCenter.position,
             Vector3.up,
-            (rotationAmount / duration) * Time.deltaTime
+            step
         );
 
-        transform.LookAt(target);
+        timer += Time.deltaTime;
 
-        if (t >= 1f)
+        if (timer >= duration)
         {
-            isRotating = false;
-            onComplete?.Invoke(); 
+            rotating = false;
         }
     }
 }

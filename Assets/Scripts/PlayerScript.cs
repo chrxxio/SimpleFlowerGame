@@ -48,11 +48,17 @@
 //        return motion;
 //    }
 //}
+
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+
 [RequireComponent(typeof(SphereCollider))]
 public class PlayerController : MonoBehaviour {
+
+    [SerializeField] private CameraController cameraController;
+
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float turnSpeed = 120f;
@@ -111,6 +117,12 @@ public class PlayerController : MonoBehaviour {
                 WrapAroundTower(crossDirection);
                 LogDiagnostic("POST-ROTATE", oldFace);
 
+                if (cameraController != null)
+                {
+                    Debug.Log("CAMERA ROTATE TRIGGERED: " + crossDirection);
+                    cameraController.TriggerEdgeRotation(crossDirection);
+                }
+
                 SnapToFace(newFace);
                 PullAwayFromOldFace(oldFace);
                 LogDiagnostic("POST-SNAP", newFace);
@@ -120,6 +132,9 @@ public class PlayerController : MonoBehaviour {
 
                 Debug.Log($"WRAP: face {oldFace} -> face {newFace}, " +
                           $"crossDir={crossDirection} ({(crossDirection > 0 ? "CCW" : "CW")})");
+
+
+
                 return;
             }
         }
