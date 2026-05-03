@@ -36,7 +36,19 @@ public class PlayerController : MonoBehaviour {
         playerRadius = sphere.radius * transform.lossyScale.x;
     }
 
-    void Update() {
+    void Update()
+    {
+        // 🔥 ADD THIS (TOP OF UPDATE)
+        FlowerMagnet magnet = FindObjectOfType<FlowerMagnet>();
+
+        bool magnetActive = (magnet != null && magnet.IsActive());
+        bool magnetFinished = (magnet != null && magnet.HasSnapped());
+
+        if (magnetActive || magnetFinished)
+        {
+            return;
+        }
+
         Keyboard kb = Keyboard.current;
         if (kb == null) return;
 
@@ -58,9 +70,11 @@ public class PlayerController : MonoBehaviour {
             wrapCooldownTimer -= Time.deltaTime;
 
         // Wrap detection
-        if (currentFace != -1 && wrapCooldownTimer <= 0f) {
+        if (currentFace != -1 && wrapCooldownTimer <= 0f)
+        {
             int crossDirection = CheckEdgeCrossing(currentFace);
-            if (crossDirection != 0) {
+            if (crossDirection != 0)
+            {
                 int oldFace = currentFace;
                 int newFace = GetWrappedFace(oldFace, crossDirection);
 
@@ -71,7 +85,8 @@ public class PlayerController : MonoBehaviour {
                 WrapAroundTower(crossDirection);
                 LogDiagnostic("POST-ROTATE", oldFace);
 
-                if (cameraController != null) {
+                if (cameraController != null)
+                {
                     Debug.Log("CAMERA ROTATE TRIGGERED: " + crossDirection);
                     cameraController.TriggerEdgeRotation(crossDirection);
                 }
@@ -83,8 +98,7 @@ public class PlayerController : MonoBehaviour {
                 currentFace = newFace;
                 wrapCooldownTimer = wrapCooldown;
 
-                Debug.Log($"WRAP: face {oldFace} -> face {newFace}, " +
-                          $"crossDir={crossDirection} ({(crossDirection > 0 ? "CCW" : "CW")})");
+                Debug.Log($"WRAP: face {oldFace} -> face {newFace}");
 
                 if (stemTrail != null) stemTrail.OnPlayerWrapped(cornerPos);
 
@@ -92,20 +106,29 @@ public class PlayerController : MonoBehaviour {
             }
         }
 
-        // Top-edge detection
-        if (currentFace != -1) {
+        // 🔥 MODIFY THIS BLOCK (MAGNET TRIGGER)
+        if (currentFace != -1)
+        {
             Bounds localBounds = GetTowerLocalBounds();
             Vector3 localPos = tower.InverseTransformPoint(transform.position);
             Vector3 relPos = localPos - localBounds.center;
-            if (relPos.y >= localBounds.extents.y) {
-                Debug.Log("Player reached the top of the tower");
+
+            if (relPos.y >= localBounds.extents.y)
+            {
+                if (magnet != null)
+                {
+                    magnet.ActivateMagnet();
+                }
             }
         }
 
-        // Maintain surface adherence on the current face — does NOT redetect face
-        if (currentFace != -1) {
+        // Maintain surface adherence
+        if (currentFace != -1)
+        {
             SnapToFace(currentFace);
-        } else {
+        }
+        else
+        {
             currentFace = SnapToTowerSurface();
         }
     }
