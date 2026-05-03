@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using DG.Tweening;
 
 public class FlowerMagnet : MonoBehaviour
 {
@@ -9,6 +10,7 @@ public class FlowerMagnet : MonoBehaviour
 
     public CameraFollowRoot followCam;
     public CameraFlowerOrbit flowerOrbitCam;
+    public Camera mainCamera;
 
     [Header("Camera Timing")]
     public float cameraSwitchDelay = 1.5f;
@@ -23,23 +25,47 @@ public class FlowerMagnet : MonoBehaviour
     public float snapDistance = 0.5f;
 
     private bool isActive = false;
-    public bool IsActive()
-    {
-        return isActive;
-    }
+    private bool hasSnapped = false;
+
+    public bool IsActive() => isActive;
+    public bool HasSnapped() => hasSnapped;
 
     public void ActivateMagnet()
     {
-        if (isActive || hasSnapped) return; // 🔥 ADD THIS
+        if (isActive || hasSnapped) return;
 
         isActive = true;
         Debug.Log("🌸 MAGNET ACTIVATED");
     }
 
-    private bool hasSnapped = false;
-    public bool HasSnapped()
+    public void StopAnimation()
     {
-        return hasSnapped;
+        DOTween.KillAll();
+    }
+
+    void SwitchToOrthoZoomOut()
+    {
+        if (mainCamera == null) return;
+
+        mainCamera.orthographic = true;
+
+        // 🎯 POSITION (pull back + lift up)
+        mainCamera.transform.position = new Vector3(
+            player.position.x,
+            player.position.y + 6f,   // height
+            player.position.z - 10f    // pull back
+        );
+
+        // 🎯 ROTATION (tilt toward horizon)
+        mainCamera.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
+
+        // 🎯 ZOOM OUT
+        DOTween.To(
+            () => mainCamera.orthographicSize,
+            x => mainCamera.orthographicSize = x,
+            28f,   // adjust this if needed
+            1.2f
+        ).SetEase(Ease.OutCubic);
     }
 
     void Update()
@@ -53,48 +79,42 @@ public class FlowerMagnet : MonoBehaviour
         Vector3 toFlower = targetPos - player.position;
         float distance = toFlower.magnitude;
 
-        // SNAP
+        // 🌸 SNAP
         if (distance < snapDistance && !hasSnapped)
         {
             hasSnapped = true;
 
-            player.position = targetPos;
+            StopAnimation();
 
+            player.position = targetPos;
             Debug.Log("🌸 SNAPPED TO CENTER");
 
             isActive = false;
 
-            // 🔥 HARD LOCK PLAYER
+            // Lock player
             PlayerController playerScript = player.GetComponent<PlayerController>();
             if (playerScript != null)
-            {
                 playerScript.enabled = false;
-            }
 
-            // 🔥 SWITCH CAMERA
+            // Camera logic
+            SwitchToOrthoZoomOut();
             StartCoroutine(SwitchCameraAfterDelay(0.3f));
 
             return;
         }
 
-        // 🎯 Normalize distance (0 = at center, 1 = far away)
+        // Movement logic
         float normalized = Mathf.Clamp01(distance / 10f);
-
-        // 🔥 Ease curve (slow far away, stronger near center)
         float strength = Mathf.Lerp(0.5f, 1.5f, 1f - normalized);
 
-        // Direction
         Vector3 dir = toFlower.normalized;
 
-        // Pull
         Vector3 pull = dir * pullStrength * strength * Time.deltaTime;
 
-        // 🎮 Side control fades as you get closer
         float input = Input.GetAxis("Horizontal");
         float sideFactor = Mathf.Lerp(sideInfluence, 0.1f, 1f - normalized);
         Vector3 side = player.right * input * sideFactor * Time.deltaTime;
 
-        // Final move
         Vector3 move = pull + side;
         move = Vector3.ClampMagnitude(move, maxSpeed * Time.deltaTime);
 
