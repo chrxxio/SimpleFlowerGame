@@ -5,6 +5,7 @@ public class StemTrail : MonoBehaviour
 {
     [SerializeField] private Transform player;
     [SerializeField] private float pointSpacing = 0.3f;
+    [SerializeField] private AudioClip growSFX;
 
     private LineRenderer lr;
     private Vector3 lastCommittedPos;
@@ -82,6 +83,7 @@ public class StemTrail : MonoBehaviour
 
     void AppendLivePoint(Vector3 worldPos)
     {
+        SoundManager.Instance.PlaySFX(growSFX, 0.08f);
         int newIndex = lr.positionCount;
         lr.positionCount = newIndex + 1;
         lr.SetPosition(newIndex, worldPos);
