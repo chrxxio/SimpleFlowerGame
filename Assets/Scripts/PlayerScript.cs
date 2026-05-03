@@ -95,6 +95,16 @@ public class PlayerController : MonoBehaviour {
             }
         }
 
+        // Top-edge detection
+        if (currentFace != -1) {
+            Bounds localBounds = GetTowerLocalBounds();
+            Vector3 localPos = tower.InverseTransformPoint(transform.position);
+            Vector3 relPos = localPos - localBounds.center;
+            if (relPos.y >= localBounds.extents.y) {
+                Debug.Log("Player reached the top of the tower");
+            }
+        }
+
         // Maintain surface adherence on the current face — does NOT redetect face
         if (currentFace != -1) {
             SnapToFace(currentFace);
