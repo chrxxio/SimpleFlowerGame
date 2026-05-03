@@ -1,9 +1,20 @@
 using UnityEngine;
+using System.Collections;
 
 public class FlowerMagnet : MonoBehaviour
 {
     public Transform player;
     public Transform centerPoint;
+    public CameraController cameraController;
+
+    public CameraFollowRoot followCam;
+    public CameraFlowerOrbit flowerOrbitCam;
+
+    [Header("Camera Timing")]
+    public float cameraSwitchDelay = 1.5f;
+
+    private float magnetTimer = 0f;
+    private bool cameraSwitched = false;
 
     [Header("Magnet Settings")]
     public float pullStrength = 7f;
@@ -19,17 +30,24 @@ public class FlowerMagnet : MonoBehaviour
 
     public void ActivateMagnet()
     {
-        if (isActive) return;
+        if (isActive || hasSnapped) return; // 🔥 ADD THIS
 
         isActive = true;
         Debug.Log("🌸 MAGNET ACTIVATED");
     }
+
     private bool hasSnapped = false;
+    public bool HasSnapped()
+    {
+        return hasSnapped;
+    }
 
     void Update()
     {
         if (!player || !centerPoint) return;
         if (!isActive) return;
+
+        magnetTimer += Time.deltaTime;
 
         Vector3 targetPos = centerPoint.position;
         Vector3 toFlower = targetPos - player.position;
@@ -41,10 +59,22 @@ public class FlowerMagnet : MonoBehaviour
             hasSnapped = true;
 
             player.position = targetPos;
+
             Debug.Log("🌸 SNAPPED TO CENTER");
 
             isActive = false;
-            return; // 🔥 IMPORTANT: stop further movement this frame
+
+            // 🔥 HARD LOCK PLAYER
+            PlayerController playerScript = player.GetComponent<PlayerController>();
+            if (playerScript != null)
+            {
+                playerScript.enabled = false;
+            }
+
+            // 🔥 SWITCH CAMERA
+            StartCoroutine(SwitchCameraAfterDelay(0.3f));
+
+            return;
         }
 
         // 🎯 Normalize distance (0 = at center, 1 = far away)
@@ -70,5 +100,21 @@ public class FlowerMagnet : MonoBehaviour
 
         player.position += move;
         player.LookAt(targetPos);
+    }
+
+    IEnumerator SwitchCameraAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        if (followCam != null)
+            followCam.enabled = false;
+
+        if (flowerOrbitCam != null)
+        {
+            flowerOrbitCam.enabled = true;
+            flowerOrbitCam.ResetOrbit();
+        }
+
+        Debug.Log("🎥 CAMERA SWITCHED AFTER SNAP");
     }
 }
