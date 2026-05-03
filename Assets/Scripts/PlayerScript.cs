@@ -3,9 +3,11 @@ using UnityEngine.InputSystem;
 
 
 [RequireComponent(typeof(SphereCollider))]
-public class PlayerController : MonoBehaviour {
+public class PlayerController : MonoBehaviour
+{
 
     [SerializeField] private CameraController cameraController;
+    [SerializeField] private RootController rootController;
 
 
     [Header("Movement")]
@@ -31,12 +33,21 @@ public class PlayerController : MonoBehaviour {
     private int currentFace = -1;
     private float wrapCooldownTimer = 0f;
 
-    void Awake() {
+    void Awake()
+    {
         sphere = GetComponent<SphereCollider>();
         playerRadius = sphere.radius * transform.lossyScale.x;
     }
 
-    void Update() {
+    void Update()
+    {
+        FlowerMagnet magnet = FindObjectOfType<FlowerMagnet>();
+
+        if (magnet != null && magnet.IsActive())
+        {
+            return;
+        }
+
         Keyboard kb = Keyboard.current;
         if (kb == null) return;
 
@@ -46,11 +57,54 @@ public class PlayerController : MonoBehaviour {
         if (kb.dKey.isPressed) turn -= 1f;
         transform.Rotate(0f, 0f, turn * turnSpeed * Time.deltaTime);
 
-        // === MOVEMENT ===
-        Vector3 desiredMove = transform.up * moveSpeed * Time.deltaTime;
-        Vector3 actualMove = ResolveMovement(desiredMove);
-        transform.position += actualMove;
 
+        // === MOVEMENT ===
+        Vector3 desiredMove;
+
+        // 🔥 MAGNET OVERRIDE
+        if (rootController != null && rootController.IsMagnetActive())
+        {
+            Transform flower = rootController.flowerTarget;
+
+            if (flower != null)
+            {
+                Vector3 toFlower = (flower.position - transform.position);
+
+                Vector3 pull = toFlower.normalized * moveSpeed * 3f;
+
+                float turnInput = 0f;
+                if (Keyboard.current.aKey.isPressed) turnInput += 1f;
+                if (Keyboard.current.dKey.isPressed) turnInput -= 1f;
+
+                Vector3 side = transform.right * turnInput * moveSpeed * 0.5f;
+
+                desiredMove = (pull + side) * Time.deltaTime;
+            }
+            else
+            {
+                desiredMove = Vector3.zero;
+            }
+        }
+        else
+        {
+            // normal climbing
+            desiredMove = transform.up * moveSpeed * Time.deltaTime;
+        }
+        if (rootController != null && rootController.IsMagnetActive())
+        {
+            // 🔥 IGNORE COLLISION WHEN MAGNET ACTIVE
+            transform.position += desiredMove;
+        }
+        else
+        {
+            Vector3 actualMove = ResolveMovement(desiredMove);
+            transform.position += actualMove;
+        }
+        // 🚫 STOP tower logic during magnet
+        if (rootController != null && rootController.IsMagnetActive())
+        {
+            return;
+        }
         // === TOWER LOGIC ===
         if (tower == null || towerCollider == null) return;
 
@@ -58,20 +112,27 @@ public class PlayerController : MonoBehaviour {
             wrapCooldownTimer -= Time.deltaTime;
 
         // Wrap detection
-        if (currentFace != -1 && wrapCooldownTimer <= 0f) {
+        if (currentFace != -1 && wrapCooldownTimer <= 0f &&
+        (rootController == null || !rootController.IsMagnetActive()))
+        {
             int crossDirection = CheckEdgeCrossing(currentFace);
-            if (crossDirection != 0) {
+            if (crossDirection != 0)
+            {
                 int oldFace = currentFace;
                 int newFace = GetWrappedFace(oldFace, crossDirection);
 
                 LogDiagnostic("PRE-WRAP", oldFace);
 
+                // Compute corner BEFORE rotating the player, since we need the player's
+                // current Y position in tower-local space (which is preserved through
+                // the wrap, but cleaner to compute once here)
                 Vector3 cornerPos = ComputeCornerWorldPos(oldFace, newFace);
 
                 WrapAroundTower(crossDirection);
                 LogDiagnostic("POST-ROTATE", oldFace);
 
-                if (cameraController != null) {
+                if (cameraController != null)
+                {
                     Debug.Log("CAMERA ROTATE TRIGGERED: " + crossDirection);
                     cameraController.TriggerEdgeRotation(crossDirection);
                 }
@@ -93,96 +154,61 @@ public class PlayerController : MonoBehaviour {
         }
 
         // Top-edge detection
-        if (currentFace != -1) {
-            Bounds localBounds = GetTowerLocalBounds();
-            Vector3 localPos = tower.InverseTransformPoint(transform.position);
-            Vector3 relPos = localPos - localBounds.center;
-            if (relPos.y >= localBounds.extents.y) {
-                Debug.Log("Player reached the top of the tower");
+        if (currentFace != -1)
+{
+    Bounds localBounds = GetTowerLocalBounds();
+    Vector3 localPos = tower.InverseTransformPoint(transform.position);
+    Vector3 relPos = localPos - localBounds.center;
+
+            if (relPos.y >= localBounds.extents.y)
+            {
+                if (magnet != null)
+                {
+                    magnet.ActivateMagnet();
+                }
             }
         }
 
         // Maintain surface adherence on the current face — does NOT redetect face
-        if (currentFace != -1) {
-            SnapToFace(currentFace);
-        } else {
+        if (currentFace != -1)
+        {
+            if (rootController == null || !rootController.IsMagnetActive())
+            {
+                SnapToFace(currentFace);
+            }
+        }
+        else
+        {
+            // First frame: auto-detect the initial face
             currentFace = SnapToTowerSurface();
         }
     }
 
-    Vector3 ResolveMovement(Vector3 motion) {
+    Vector3 ResolveMovement(Vector3 motion)
+    {
         float distance = motion.magnitude;
         if (distance < 0.0001f) return Vector3.zero;
 
+        Vector3 direction = motion / distance;
         float radius = sphere.radius * transform.lossyScale.x;
         Vector3 origin = transform.position + sphere.center;
 
-        // Try full motion first
-        if (CanMove(origin, motion, radius)) {
-            return motion;
+        if (Physics.SphereCast(origin, radius, direction, out RaycastHit hit,
+                               distance + skinWidth, obstacleLayers,
+                               QueryTriggerInteraction.Ignore))
+        {
+            float allowed = Mathf.Max(0f, hit.distance - skinWidth);
+            return direction * allowed;
         }
 
-        // Build face-local axes
-        Vector3 faceNormal = GetCurrentFaceNormalWorld();
-        if (faceNormal == Vector3.zero) {
-            // No face context (shouldn't happen during gameplay) — just stop
-            return Vector3.zero;
-        }
-
-        Vector3 faceUp = tower.up;
-        Vector3 faceRight = Vector3.Cross(faceUp, faceNormal).normalized;
-
-        // Decompose motion into face-local components
-        float upAmount = Vector3.Dot(motion, faceUp);
-        float rightAmount = Vector3.Dot(motion, faceRight);
-
-        // Try only the vertical (up) component
-        Vector3 upMotion = faceUp * upAmount;
-        if (Mathf.Abs(upAmount) > 0.0001f && CanMove(origin, upMotion, radius)) {
-            return upMotion;
-        }
-
-        // Try only the horizontal (right) component
-        Vector3 rightMotion = faceRight * rightAmount;
-        if (Mathf.Abs(rightAmount) > 0.0001f && CanMove(origin, rightMotion, radius)) {
-            return rightMotion;
-        }
-
-        // Both axes blocked — don't move
-        return Vector3.zero;
-    }
-
-    bool CanMove(Vector3 origin, Vector3 motion, float radius) {
-        float dist = motion.magnitude;
-        if (dist < 0.0001f) return true;
-
-        Vector3 dir = motion / dist;
-        return !Physics.SphereCast(origin, radius, dir, out _,
-                                    dist + skinWidth, obstacleLayers,
-                                    QueryTriggerInteraction.Ignore);
-    }
-
-    /// <summary>
-    /// Returns the world-space outward normal of the current face.
-    /// </summary>
-    Vector3 GetCurrentFaceNormalWorld() {
-        if (currentFace == -1 || tower == null) return Vector3.zero;
-
-        Vector3 localNormal;
-        switch (currentFace) {
-            case 0: localNormal = Vector3.right; break;
-            case 1: localNormal = Vector3.left; break;
-            case 2: localNormal = Vector3.forward; break;
-            case 3: localNormal = Vector3.back; break;
-            default: return Vector3.zero;
-        }
-        return tower.TransformDirection(localNormal);
+        return motion;
     }
 
     /// <summary>
     /// Returns +1 for CCW-edge crossing, -1 for CW-edge crossing, 0 for no crossing.
     /// </summary>
-    int CheckEdgeCrossing(int face) {
+    int CheckEdgeCrossing(int face)
+    {
         Bounds localBounds = GetTowerLocalBounds();
         Vector3 localPos = tower.InverseTransformPoint(transform.position);
         Vector3 relPos = localPos - localBounds.center;
@@ -192,7 +218,8 @@ public class PlayerController : MonoBehaviour {
         float threshold;
         int ccwSign;
 
-        switch (face) {
+        switch (face)
+        {
             case 0: inFaceCoord = relPos.z; threshold = extents.z; ccwSign = -1; break;
             case 1: inFaceCoord = relPos.z; threshold = extents.z; ccwSign = 1; break;
             case 2: inFaceCoord = relPos.x; threshold = extents.x; ccwSign = 1; break;
@@ -205,18 +232,21 @@ public class PlayerController : MonoBehaviour {
         return 0;
     }
 
-    int GetWrappedFace(int oldFace, int direction) {
+    int GetWrappedFace(int oldFace, int direction)
+    {
         int[] ccwNext = { 3, 2, 0, 1 };
         int[] cwNext = { 2, 3, 1, 0 };
         return direction > 0 ? ccwNext[oldFace] : cwNext[oldFace];
     }
 
-    void WrapAroundTower(int rotationDirection) {
+    void WrapAroundTower(int rotationDirection)
+    {
         float angle = 90f * rotationDirection;
         transform.Rotate(tower.up, angle, Space.World);
     }
 
-    void SnapToFace(int face) {
+    void SnapToFace(int face)
+    {
         Bounds localBounds = GetTowerLocalBounds();
         Vector3 center = localBounds.center;
         Vector3 extents = localBounds.extents;
@@ -224,7 +254,8 @@ public class PlayerController : MonoBehaviour {
         Vector3 localPos = tower.InverseTransformPoint(transform.position);
         Vector3 relPos = localPos - center;
 
-        switch (face) {
+        switch (face)
+        {
             case 0: relPos.x = extents.x + playerRadius / tower.lossyScale.x; break;
             case 1: relPos.x = -extents.x - playerRadius / tower.lossyScale.x; break;
             case 2: relPos.z = extents.z + playerRadius / tower.lossyScale.z; break;
@@ -234,7 +265,8 @@ public class PlayerController : MonoBehaviour {
         transform.position = tower.TransformPoint(relPos + center);
     }
 
-    void PullAwayFromOldFace(int oldFace) {
+    void PullAwayFromOldFace(int oldFace)
+    {
         Bounds localBounds = GetTowerLocalBounds();
         Vector3 center = localBounds.center;
         Vector3 extents = localBounds.extents;
@@ -242,7 +274,8 @@ public class PlayerController : MonoBehaviour {
         Vector3 localPos = tower.InverseTransformPoint(transform.position);
         Vector3 relPos = localPos - center;
 
-        switch (oldFace) {
+        switch (oldFace)
+        {
             case 0: relPos.x = extents.x - wrapInset; break;
             case 1: relPos.x = -extents.x + wrapInset; break;
             case 2: relPos.z = extents.z - wrapInset; break;
@@ -252,7 +285,8 @@ public class PlayerController : MonoBehaviour {
         transform.position = tower.TransformPoint(relPos + center);
     }
 
-    int SnapToTowerSurface() {
+    int SnapToTowerSurface()
+    {
         Bounds localBounds = GetTowerLocalBounds();
         Vector3 center = localBounds.center;
         Vector3 extents = localBounds.extents;
@@ -273,7 +307,8 @@ public class PlayerController : MonoBehaviour {
         return face;
     }
 
-    Bounds GetTowerLocalBounds() {
+    Bounds GetTowerLocalBounds()
+    {
         if (towerCollider is MeshCollider mc && mc.sharedMesh != null)
             return mc.sharedMesh.bounds;
         if (towerCollider is BoxCollider bc)
@@ -282,7 +317,12 @@ public class PlayerController : MonoBehaviour {
         return new Bounds(Vector3.zero, Vector3.one);
     }
 
-    Vector3 ComputeCornerWorldPos(int oldFace, int newFace) {
+    /// <summary>
+    /// Computes the world-space position of the corner edge between two faces, at the
+    /// player's current local Y. Used by StemTrail to bend the line cleanly at corners.
+    /// </summary>
+    Vector3 ComputeCornerWorldPos(int oldFace, int newFace)
+    {
         Bounds localBounds = GetTowerLocalBounds();
         Vector3 center = localBounds.center;
         Vector3 extents = localBounds.extents;
@@ -290,12 +330,15 @@ public class PlayerController : MonoBehaviour {
         Vector3 playerLocal = tower.InverseTransformPoint(transform.position);
         float localY = playerLocal.y;
 
+        // Determine corner X and Z signs based on which faces are involved
         bool cornerPlusX = (oldFace == 0 || newFace == 0);
         bool cornerPlusZ = (oldFace == 2 || newFace == 2);
 
         float cornerX = (cornerPlusX ? extents.x : -extents.x) + center.x;
         float cornerZ = (cornerPlusZ ? extents.z : -extents.z) + center.z;
 
+        // Push outward by player radius along both axes so the corner sits at the
+        // same effective distance from the tower as the player's surface
         float xPush = playerRadius / tower.lossyScale.x * (cornerPlusX ? 1f : -1f);
         float zPush = playerRadius / tower.lossyScale.z * (cornerPlusZ ? 1f : -1f);
 
@@ -303,7 +346,8 @@ public class PlayerController : MonoBehaviour {
         return tower.TransformPoint(cornerLocal);
     }
 
-    void LogDiagnostic(string label, int faceContext) {
+    void LogDiagnostic(string label, int faceContext)
+    {
         if (!verboseLogging) return;
 
         Bounds localBounds = GetTowerLocalBounds();
