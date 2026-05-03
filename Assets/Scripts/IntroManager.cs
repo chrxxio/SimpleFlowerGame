@@ -8,7 +8,7 @@ public class IntroSequence : MonoBehaviour {
     [SerializeField] private GameObject aPrompt;
     [SerializeField] private GameObject dPrompt;
     [SerializeField] private Transform player;
-    [SerializeField] private MeshRenderer playerRenderer;
+    [SerializeField] private Renderer playerRenderer;
     [SerializeField] private PlayerController playerController;
     [SerializeField] private StemTrail stemTrail;
 
