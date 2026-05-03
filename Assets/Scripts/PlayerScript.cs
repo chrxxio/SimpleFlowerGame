@@ -1,7 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
-
 [RequireComponent(typeof(SphereCollider))]
 public class PlayerController : MonoBehaviour
 {
@@ -155,10 +154,9 @@ public class PlayerController : MonoBehaviour
 
         // Top-edge detection
         if (currentFace != -1)
-{
-    Bounds localBounds = GetTowerLocalBounds();
-    Vector3 localPos = tower.InverseTransformPoint(transform.position);
-    Vector3 relPos = localPos - localBounds.center;
+
+        {
+            Bounds localBounds = GetTowerLocalBounds(); Vector3 localPos = tower.InverseTransformPoint(transform.position); Vector3 relPos = localPos - localBounds.center;
 
             if (relPos.y >= localBounds.extents.y)
             {
@@ -371,4 +369,5 @@ public class PlayerController : MonoBehaviour
     }
 
     static string Format(Vector3 v) => $"({v.x:F2},{v.y:F2},{v.z:F2})";
+
 }
