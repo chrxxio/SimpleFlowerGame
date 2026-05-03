@@ -21,6 +21,7 @@ public class CameraFollowRoot : MonoBehaviour
     // ✅ runtime offset (correct place)
     private Vector3 runtimeOffset;
     private bool initialized = false;
+    public bool isMagnetMode = false;
 
     void Start()
     {
@@ -34,6 +35,22 @@ public class CameraFollowRoot : MonoBehaviour
     void LateUpdate()
     {
         if (!target || isRotating) return;
+
+        if (isMagnetMode)
+        {
+            // 🔥 SIMPLE FOLLOW (NO ROTATION LOGIC)
+            Vector3 desired = target.position + new Vector3(0, runtimeOffset.y, zoomDistance);
+
+            transform.position = Vector3.SmoothDamp(
+            transform.position,
+            desired,
+            ref velocity,
+            1f / followSmooth
+        );
+
+            transform.LookAt(target.position);
+            return;
+        }
 
         if (!initialized)
         {
