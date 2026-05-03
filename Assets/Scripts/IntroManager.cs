@@ -14,6 +14,7 @@ public class IntroSequence : MonoBehaviour {
     [SerializeField] private ParticleSystem startVFX;
     [SerializeField] private AudioClip bashSFX;
     [SerializeField] private AudioClip boomStartSFX;
+    [SerializeField] private DOTweenCameraShake cameraShake;
 
     [Header("Pulsate")]
     [SerializeField] private float pulsateScaleIncrease = 0.2f;
@@ -83,6 +84,7 @@ public class IntroSequence : MonoBehaviour {
     IEnumerator PulsateThen(System.Action onComplete) {
         if (mound == null) { onComplete?.Invoke(); yield break; }
         SoundManager.Instance.PlaySFX(bashSFX, 0.8f);
+        cameraShake.Shake();
         Vector3 baseScale = mound.localScale;
         float t = 0f;
         while (t < pulsateDuration) {
