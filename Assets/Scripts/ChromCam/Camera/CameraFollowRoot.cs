@@ -13,26 +13,22 @@ public class CameraFollowRoot : MonoBehaviour
     public float rotationDuration = 0.4f;
 
     [Header("Zoom")]
-    public float zoomMultiplier = 1.2f; // 1 = same, >1 = further out
+    public float zoomDistance = -10f; // ← THIS is what you want
 
     private Vector3 velocity;
+    private bool isRotating = false;
 
+    // ✅ runtime offset (correct place)
     private Vector3 runtimeOffset;
     private bool initialized = false;
 
-    private bool isRotating = false;
-
     void Start()
     {
-        InitializeOffset();
-    }
-
-    void InitializeOffset()
-    {
-        if (!target) return;
-
-        runtimeOffset = transform.position - target.position;
-        initialized = true;
+        if (target)
+        {
+            runtimeOffset = transform.position - target.position;
+            initialized = true;
+        }
     }
 
     void LateUpdate()
@@ -40,7 +36,10 @@ public class CameraFollowRoot : MonoBehaviour
         if (!target || isRotating) return;
 
         if (!initialized)
-            InitializeOffset();
+        {
+            runtimeOffset = transform.position - target.position;
+            initialized = true;
+        }
 
         Vector3 toPlayer = target.position - levelCenter.position;
 
@@ -51,10 +50,10 @@ public class CameraFollowRoot : MonoBehaviour
         else
             faceDir = new Vector3(0, 0, Mathf.Sign(toPlayer.z));
 
-        // rotate ORIGINAL offset (this preserves your starting camera angle)
+        // ✅ use runtime offset (NO snapping anymore)
         Vector3 rotatedOffset =
-    Quaternion.LookRotation(-faceDir) *
-    new Vector3(0, runtimeOffset.y, runtimeOffset.z * zoomMultiplier);
+            Quaternion.LookRotation(-faceDir) *
+            new Vector3(0, runtimeOffset.y, zoomDistance);
 
         Vector3 desiredPosition = target.position + rotatedOffset;
 
@@ -65,7 +64,10 @@ public class CameraFollowRoot : MonoBehaviour
             1f / followSmooth
         );
 
-        transform.LookAt(target.position + Vector3.up * 1.2f);
+        Vector3 lookTarget = target.position;
+        lookTarget.y = transform.position.y;
+
+        transform.LookAt(lookTarget);
     }
 
     public void RotateCamera(int direction)
@@ -95,17 +97,16 @@ public class CameraFollowRoot : MonoBehaviour
             Vector3 newDir = Quaternion.Euler(0, step, 0) * startDir;
             transform.position = pivot + newDir;
 
-            transform.LookAt(target.position + Vector3.up * 1.2f);
+            transform.LookAt(target.position + Vector3.up * 0.75f);
 
             time += Time.deltaTime;
             yield return null;
         }
 
-        // snap final
         Vector3 finalDir = Quaternion.Euler(0, angle, 0) * startDir;
         transform.position = pivot + finalDir;
 
-        transform.LookAt(target.position + Vector3.up * 1.2f);
+        transform.LookAt(target.position + Vector3.up * 0.75f);
 
         isRotating = false;
     }
