@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections;
 
 public class CameraFollowRoot : MonoBehaviour
@@ -13,18 +13,25 @@ public class CameraFollowRoot : MonoBehaviour
     public float rotationDuration = 0.4f;
 
     [Header("Zoom")]
-    public float zoomMultiplier = 1.2f; // 1 = same, >1 = further out
+    public float zoomMultiplier = 1.2f;
+
+    [Header("Edge Detection")]
+    public float edgeDistance = 4f;
+    public float resetDistance = 2f;
 
     private Vector3 velocity;
-
     private Vector3 runtimeOffset;
-    private bool initialized = false;
 
-    private bool isRotating = false;
+    private bool initialized;
+    private bool isRotating;
+    private bool canRotateAgain = true;
+
+    private float currentYRotation;
 
     void Start()
     {
         InitializeOffset();
+        currentYRotation = transform.eulerAngles.y;
     }
 
     void InitializeOffset()
@@ -37,24 +44,18 @@ public class CameraFollowRoot : MonoBehaviour
 
     void LateUpdate()
     {
-        if (!target || isRotating) return;
+        if (!target || !levelCenter) return;
 
         if (!initialized)
             InitializeOffset();
 
-        Vector3 toPlayer = target.position - levelCenter.position;
-
-        Vector3 faceDir;
-
-        if (Mathf.Abs(toPlayer.x) > Mathf.Abs(toPlayer.z))
-            faceDir = new Vector3(Mathf.Sign(toPlayer.x), 0, 0);
-        else
-            faceDir = new Vector3(0, 0, Mathf.Sign(toPlayer.z));
-
-        // rotate ORIGINAL offset (this preserves your starting camera angle)
         Vector3 rotatedOffset =
-    Quaternion.LookRotation(-faceDir) *
-    new Vector3(0, runtimeOffset.y, runtimeOffset.z * zoomMultiplier);
+            Quaternion.Euler(0f, currentYRotation, 0f) *
+            new Vector3(
+                runtimeOffset.x,
+                runtimeOffset.y,
+                runtimeOffset.z * zoomMultiplier
+            );
 
         Vector3 desiredPosition = target.position + rotatedOffset;
 
@@ -65,48 +66,63 @@ public class CameraFollowRoot : MonoBehaviour
             1f / followSmooth
         );
 
-        transform.LookAt(target.position + Vector3.up * 1.2f);
+        // Lock X and Z, only Y changes.
+        transform.rotation = Quaternion.Euler(0f, currentYRotation, 0f);
+
+        CheckForEdgeRotation();
+    }
+
+    void CheckForEdgeRotation()
+    {
+        if (isRotating) return;
+
+        Vector3 fromCenter = target.position - levelCenter.position;
+
+        if (canRotateAgain && fromCenter.x > edgeDistance)
+        {
+            canRotateAgain = false;
+            RotateCamera(1);
+        }
+        else if (canRotateAgain && fromCenter.x < -edgeDistance)
+        {
+            canRotateAgain = false;
+            RotateCamera(-1);
+        }
+
+        if (Mathf.Abs(fromCenter.x) < resetDistance)
+        {
+            canRotateAgain = true;
+        }
     }
 
     public void RotateCamera(int direction)
     {
         if (isRotating) return;
 
-        StartCoroutine(RotateAroundCenter(90f * direction));
+        StartCoroutine(RotateY(90f * direction));
     }
 
-    IEnumerator RotateAroundCenter(float angle)
+    IEnumerator RotateY(float amount)
     {
         isRotating = true;
 
+        float startY = currentYRotation;
+        float endY = currentYRotation + amount;
+
         float time = 0f;
-        float duration = rotationDuration;
 
-        Vector3 pivot = levelCenter.position;
-        Vector3 startPos = transform.position;
-        Vector3 startDir = startPos - pivot;
-
-        while (time < duration)
+        while (time < rotationDuration)
         {
-            float t = time / duration;
+            float t = time / rotationDuration;
+            t = Mathf.SmoothStep(0f, 1f, t);
 
-            float step = Mathf.Lerp(0f, angle, t);
-
-            Vector3 newDir = Quaternion.Euler(0, step, 0) * startDir;
-            transform.position = pivot + newDir;
-
-            transform.LookAt(target.position + Vector3.up * 1.2f);
+            currentYRotation = Mathf.Lerp(startY, endY, t);
 
             time += Time.deltaTime;
             yield return null;
         }
 
-        // snap final
-        Vector3 finalDir = Quaternion.Euler(0, angle, 0) * startDir;
-        transform.position = pivot + finalDir;
-
-        transform.LookAt(target.position + Vector3.up * 1.2f);
-
+        currentYRotation = endY;
         isRotating = false;
     }
 }
