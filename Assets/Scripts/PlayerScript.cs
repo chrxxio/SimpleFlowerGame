@@ -1,55 +1,4 @@
-﻿//using UnityEngine;
-//using UnityEngine.InputSystem;
-
-//[RequireComponent(typeof(SphereCollider))]
-//public class PlayerController : MonoBehaviour {
-//    [SerializeField] private float moveSpeed = 5f;
-//    [SerializeField] private float turnSpeed = 120f;
-//    [SerializeField] private LayerMask obstacleLayers = ~0;
-//    [SerializeField] private float skinWidth = 0.02f;
-
-//    private SphereCollider sphere;
-
-//    void Awake() {
-//        sphere = GetComponent<SphereCollider>();
-//    }
-
-//    void Update() {
-//        Keyboard kb = Keyboard.current;
-//        if (kb == null) return;
-
-//        // Rotation
-//        float turn = 0f;
-//        if (kb.aKey.isPressed) turn += 1f;
-//        if (kb.dKey.isPressed) turn -= 1f;
-//        transform.Rotate(0f, 0f, turn * turnSpeed * Time.deltaTime);
-
-//        // Movement
-//        Vector3 desiredMove = transform.up * moveSpeed * Time.deltaTime;
-//        Vector3 actualMove = ResolveMovement(desiredMove);
-//        transform.position += actualMove;
-//    }
-
-//    Vector3 ResolveMovement(Vector3 motion) {
-//        float distance = motion.magnitude;
-//        if (distance < 0.0001f) return Vector3.zero;
-
-//        Vector3 direction = motion / distance;
-//        float radius = sphere.radius * transform.lossyScale.x;
-//        Vector3 origin = transform.position + sphere.center;
-
-//        if (Physics.SphereCast(origin, radius, direction, out RaycastHit hit,
-//                               distance + skinWidth, obstacleLayers,
-//                               QueryTriggerInteraction.Ignore)) {
-//            float allowed = Mathf.Max(0f, hit.distance - skinWidth);
-//            return direction * allowed;
-//        }
-
-//        return motion;
-//    }
-//}
-
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
 
@@ -70,6 +19,9 @@ public class PlayerController : MonoBehaviour {
     [SerializeField] private Collider towerCollider;
     [SerializeField] private float wrapCooldown = 0.1f;
     [SerializeField] private float wrapInset = 0.05f;
+
+    [Header("Stem Trail")]
+    [SerializeField] private StemTrail stemTrail;
 
     [Header("Debug")]
     [SerializeField] private bool verboseLogging = true;
@@ -114,11 +66,15 @@ public class PlayerController : MonoBehaviour {
 
                 LogDiagnostic("PRE-WRAP", oldFace);
 
+                // Compute corner BEFORE rotating the player, since we need the player's
+                // current Y position in tower-local space (which is preserved through
+                // the wrap, but cleaner to compute once here)
+                Vector3 cornerPos = ComputeCornerWorldPos(oldFace, newFace);
+
                 WrapAroundTower(crossDirection);
                 LogDiagnostic("POST-ROTATE", oldFace);
 
-                if (cameraController != null)
-                {
+                if (cameraController != null) {
                     Debug.Log("CAMERA ROTATE TRIGGERED: " + crossDirection);
                     cameraController.TriggerEdgeRotation(crossDirection);
                 }
@@ -133,7 +89,7 @@ public class PlayerController : MonoBehaviour {
                 Debug.Log($"WRAP: face {oldFace} -> face {newFace}, " +
                           $"crossDir={crossDirection} ({(crossDirection > 0 ? "CCW" : "CW")})");
 
-
+                if (stemTrail != null) stemTrail.OnPlayerWrapped(cornerPos);
 
                 return;
             }
@@ -267,6 +223,34 @@ public class PlayerController : MonoBehaviour {
             return new Bounds(bc.center, bc.size);
 
         return new Bounds(Vector3.zero, Vector3.one);
+    }
+
+    /// <summary>
+    /// Computes the world-space position of the corner edge between two faces, at the
+    /// player's current local Y. Used by StemTrail to bend the line cleanly at corners.
+    /// </summary>
+    Vector3 ComputeCornerWorldPos(int oldFace, int newFace) {
+        Bounds localBounds = GetTowerLocalBounds();
+        Vector3 center = localBounds.center;
+        Vector3 extents = localBounds.extents;
+
+        Vector3 playerLocal = tower.InverseTransformPoint(transform.position);
+        float localY = playerLocal.y;
+
+        // Determine corner X and Z signs based on which faces are involved
+        bool cornerPlusX = (oldFace == 0 || newFace == 0);
+        bool cornerPlusZ = (oldFace == 2 || newFace == 2);
+
+        float cornerX = (cornerPlusX ? extents.x : -extents.x) + center.x;
+        float cornerZ = (cornerPlusZ ? extents.z : -extents.z) + center.z;
+
+        // Push outward by player radius along both axes so the corner sits at the
+        // same effective distance from the tower as the player's surface
+        float xPush = playerRadius / tower.lossyScale.x * (cornerPlusX ? 1f : -1f);
+        float zPush = playerRadius / tower.lossyScale.z * (cornerPlusZ ? 1f : -1f);
+
+        Vector3 cornerLocal = new Vector3(cornerX + xPush, localY, cornerZ + zPush);
+        return tower.TransformPoint(cornerLocal);
     }
 
     void LogDiagnostic(string label, int faceContext) {
