@@ -23,6 +23,10 @@ public class PlayerController : MonoBehaviour {
     [Header("Stem Trail")]
     [SerializeField] private StemTrail stemTrail;
 
+    [Header("Mushroom")]
+    [SerializeField] private LayerMask mushroomLayers;
+    [SerializeField] private float mushroomCooldown = 0.1f;
+
     [Header("Debug")]
     [SerializeField] private bool verboseLogging = true;
 
@@ -30,6 +34,7 @@ public class PlayerController : MonoBehaviour {
     private float playerRadius;
     private int currentFace = -1;
     private float wrapCooldownTimer = 0f;
+    private float mushroomCooldownTimer = 0f;
 
     void Awake() {
         sphere = GetComponent<SphereCollider>();
@@ -50,6 +55,9 @@ public class PlayerController : MonoBehaviour {
         Vector3 desiredMove = transform.up * moveSpeed * Time.deltaTime;
         Vector3 actualMove = ResolveMovement(desiredMove);
         transform.position += actualMove;
+
+        // === MUSHROOM BOUNCE ===
+        CheckMushroomBounce();
 
         // === TOWER LOGIC ===
         if (tower == null || towerCollider == null) return;
@@ -160,6 +168,61 @@ public class PlayerController : MonoBehaviour {
         return !Physics.SphereCast(origin, radius, dir, out _,
                                     dist + skinWidth, obstacleLayers,
                                     QueryTriggerInteraction.Ignore);
+    }
+
+    /// <summary>
+    /// Detects overlap with any object on the Mushroom layer and reflects the
+    /// player's velocity (transform.up) across the mushroom's outward normal.
+    /// </summary>
+    void CheckMushroomBounce() {
+        if (mushroomCooldownTimer > 0f) {
+            mushroomCooldownTimer -= Time.deltaTime;
+            return;
+        }
+
+        float radius = sphere.radius * transform.lossyScale.x;
+        Vector3 origin = transform.position + sphere.center;
+
+        Collider[] hits = Physics.OverlapSphere(origin, radius, mushroomLayers,
+                                                QueryTriggerInteraction.Collide);
+        if (hits.Length == 0) return;
+
+        Collider mushroom = hits[0];
+        Vector3 mushroomCenter = mushroom.transform.position;
+
+        Vector3 faceNormal = GetCurrentFaceNormalWorld();
+
+        // Outward normal from mushroom to player, projected onto the face plane
+        Vector3 outward = transform.position - mushroomCenter;
+        if (faceNormal != Vector3.zero) {
+            outward = Vector3.ProjectOnPlane(outward, faceNormal);
+        }
+
+        if (outward.sqrMagnitude < 0.0001f) {
+            // Player is exactly on the mushroom's center axis — degenerate case.
+            // Just reverse direction.
+            outward = -transform.up;
+        }
+
+        outward = outward.normalized;
+
+        // Reflect transform.up across the outward normal
+        Vector3 incoming = transform.up;
+        Vector3 reflected = incoming - 2f * Vector3.Dot(incoming, outward) * outward;
+        reflected = reflected.normalized;
+
+        // Apply rotation: local +Z stays aligned with the inward face direction
+        // (consistent with the player's pre-bounce orientation), local +Y becomes
+        // the reflected direction
+        Vector3 forwardForRotation = (faceNormal != Vector3.zero) ? -faceNormal : transform.forward;
+        transform.rotation = Quaternion.LookRotation(forwardForRotation, reflected);
+
+        if (stemTrail != null) stemTrail.OnPlayerBounced(transform.position);
+
+        mushroomCooldownTimer = mushroomCooldown;
+
+        Debug.Log($"BOUNCE: mushroom={mushroom.gameObject.name}, " +
+                  $"incoming={incoming}, outward={outward}, reflected={reflected}");
     }
 
     /// <summary>

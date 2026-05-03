@@ -1,25 +1,21 @@
 using UnityEngine;
 
 [RequireComponent(typeof(LineRenderer))]
-public class StemTrail : MonoBehaviour
-{
+public class StemTrail : MonoBehaviour {
     [SerializeField] private Transform player;
     [SerializeField] private float pointSpacing = 0.3f;
 
     private LineRenderer lr;
     private Vector3 lastCommittedPos;
 
-    void Awake()
-    {
+    void Awake() {
         lr = GetComponent<LineRenderer>();
         lr.useWorldSpace = true;
         lr.positionCount = 0;
     }
 
-    void Start()
-    {
-        if (player == null)
-        {
+    void Start() {
+        if (player == null) {
             Debug.LogError("StemTrail: player reference not set.");
             enabled = false;
             return;
@@ -31,8 +27,7 @@ public class StemTrail : MonoBehaviour
         AppendLivePoint(player.position);
     }
 
-    void Update()
-    {
+    void Update() {
         if (player == null) return;
 
         // Always update the live (last) point to match the player's position
@@ -42,8 +37,7 @@ public class StemTrail : MonoBehaviour
         // If the player has moved far enough from the last committed point,
         // promote the live point and add a new live one
         float distance = Vector3.Distance(player.position, lastCommittedPos);
-        if (distance >= pointSpacing)
-        {
+        if (distance >= pointSpacing) {
             CommitPoint(player.position);
             AppendLivePoint(player.position);
         }
@@ -53,8 +47,7 @@ public class StemTrail : MonoBehaviour
     /// Called by the player when a wrap occurs. Inserts a corner point so the line
     /// bends cleanly at the tower's edge instead of cutting a diagonal across it.
     /// </summary>
-    public void OnPlayerWrapped(Vector3 cornerWorldPos)
-    {
+    public void OnPlayerWrapped(Vector3 cornerWorldPos) {
         if (player == null) return;
 
         // The live point is currently sitting at the player's pre-wrap position
@@ -72,18 +65,34 @@ public class StemTrail : MonoBehaviour
         lastCommittedPos = player.position;
     }
 
-    void CommitPoint(Vector3 worldPos)
-    {
+    void CommitPoint(Vector3 worldPos) {
         int newIndex = lr.positionCount;
         lr.positionCount = newIndex + 1;
         lr.SetPosition(newIndex, worldPos);
         lastCommittedPos = worldPos;
     }
 
-    void AppendLivePoint(Vector3 worldPos)
-    {
+    void AppendLivePoint(Vector3 worldPos) {
         int newIndex = lr.positionCount;
         lr.positionCount = newIndex + 1;
         lr.SetPosition(newIndex, worldPos);
+    }
+
+    /// <summary>
+    /// Called by the player when a bounce occurs. Inserts a point at the bounce
+    /// location so the line bends cleanly there.
+    /// </summary>
+    public void OnPlayerBounced(Vector3 bouncePos) {
+        if (player == null) return;
+
+        // Append the bounce point as a committed vertex
+        int newIndex = lr.positionCount;
+        lr.positionCount = newIndex + 1;
+        lr.SetPosition(newIndex, bouncePos);
+
+        // Append a new live point at the player's current position
+        AppendLivePoint(player.position);
+
+        lastCommittedPos = player.position;
     }
 }
