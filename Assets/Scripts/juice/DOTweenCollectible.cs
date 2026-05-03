@@ -29,4 +29,10 @@ public class DOTweenCollectible : MonoBehaviour
             .SetEase(Ease.InOutSine)
             .SetLoops(-1, LoopType.Yoyo);
     }
+
+
+    public void StopAnimation()
+    {
+        DOTween.KillAll();
+    }
 }
