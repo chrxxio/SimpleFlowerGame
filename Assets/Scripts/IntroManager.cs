@@ -11,6 +11,9 @@ public class IntroSequence : MonoBehaviour {
     [SerializeField] private Renderer playerRenderer;
     [SerializeField] private PlayerController playerController;
     [SerializeField] private StemTrail stemTrail;
+    [SerializeField] private ParticleSystem startVFX;
+    [SerializeField] private AudioClip bashSFX;
+    [SerializeField] private AudioClip boomStartSFX;
 
     [Header("Pulsate")]
     [SerializeField] private float pulsateScaleIncrease = 0.2f;
@@ -60,7 +63,7 @@ public class IntroSequence : MonoBehaviour {
 
     void OnPulseComplete() {
         state = stateAfterPulse;
-
+        
         switch (state) {
             case State.AwaitD1:
             case State.AwaitD2:
@@ -70,6 +73,8 @@ public class IntroSequence : MonoBehaviour {
                 if (aPrompt != null) aPrompt.SetActive(true);
                 break;
             case State.Sprouting:
+                startVFX.Play();
+                SoundManager.Instance.PlaySFX(boomStartSFX);
                 StartCoroutine(Sprout());
                 break;
         }
@@ -77,7 +82,7 @@ public class IntroSequence : MonoBehaviour {
 
     IEnumerator PulsateThen(System.Action onComplete) {
         if (mound == null) { onComplete?.Invoke(); yield break; }
-
+        SoundManager.Instance.PlaySFX(bashSFX, 0.8f);
         Vector3 baseScale = mound.localScale;
         float t = 0f;
         while (t < pulsateDuration) {
@@ -87,6 +92,7 @@ public class IntroSequence : MonoBehaviour {
             yield return null;
         }
         mound.localScale = baseScale;
+        
         onComplete?.Invoke();
     }
 
