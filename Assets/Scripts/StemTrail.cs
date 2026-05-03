@@ -1,35 +1,89 @@
 using UnityEngine;
 
-public class StemTrail : MonoBehaviour {
-    [SerializeField] private GameObject segmentPrefab;
-    [SerializeField] private float segmentRadius = 0.5f;
-    [SerializeField] private float playerRadius = 0.5f;
-    [SerializeField] private Transform stemContainer; // optional parent for hierarchy tidiness
+[RequireComponent(typeof(LineRenderer))]
+public class StemTrail : MonoBehaviour
+{
+    [SerializeField] private Transform player;
+    [SerializeField] private float pointSpacing = 0.3f;
 
-    private Vector3 lastSpawnPos;
-    private float spacing;        // = 2 * segmentRadius
-    private float spawnOffset;    // = playerRadius + segmentRadius
+    private LineRenderer lr;
+    private Vector3 lastCommittedPos;
 
-    void Start() {
-        spacing = 2f * segmentRadius;
-        spawnOffset = playerRadius + segmentRadius;
-
-        // Drop the first segment immediately behind the player at spawn
-        SpawnSegment();
-        lastSpawnPos = transform.position;
+    void Awake()
+    {
+        lr = GetComponent<LineRenderer>();
+        lr.useWorldSpace = true;
+        lr.positionCount = 0;
     }
 
-    void Update() {
-        float distanceSinceLast = Vector3.Distance(transform.position, lastSpawnPos);
-        if (distanceSinceLast >= spacing) {
-            SpawnSegment();
-            lastSpawnPos = transform.position;
+    void Start()
+    {
+        if (player == null)
+        {
+            Debug.LogError("StemTrail: player reference not set.");
+            enabled = false;
+            return;
+        }
+
+        // Drop the first committed point at the player's starting position,
+        // plus a "live" point that will track the player.
+        CommitPoint(player.position);
+        AppendLivePoint(player.position);
+    }
+
+    void Update()
+    {
+        if (player == null) return;
+
+        // Always update the live (last) point to match the player's position
+        int liveIndex = lr.positionCount - 1;
+        lr.SetPosition(liveIndex, player.position);
+
+        // If the player has moved far enough from the last committed point,
+        // promote the live point and add a new live one
+        float distance = Vector3.Distance(player.position, lastCommittedPos);
+        if (distance >= pointSpacing)
+        {
+            CommitPoint(player.position);
+            AppendLivePoint(player.position);
         }
     }
 
-    void SpawnSegment() {
-        // Spawn behind the player, opposite the direction they're facing
-        Vector3 spawnPos = transform.position - transform.up * spawnOffset;
-        GameObject segment = Instantiate(segmentPrefab, spawnPos, Quaternion.identity, stemContainer);
+    /// <summary>
+    /// Called by the player when a wrap occurs. Inserts a corner point so the line
+    /// bends cleanly at the tower's edge instead of cutting a diagonal across it.
+    /// </summary>
+    public void OnPlayerWrapped(Vector3 cornerWorldPos)
+    {
+        if (player == null) return;
+
+        // The live point is currently sitting at the player's pre-wrap position
+        // (Update updated it this frame). Append the corner point next, which makes
+        // the previous live point implicitly permanent (no longer the tip).
+        int newIndex = lr.positionCount;
+        lr.positionCount = newIndex + 1;
+        lr.SetPosition(newIndex, cornerWorldPos);
+
+        // Append a new live point at the player's post-wrap position
+        AppendLivePoint(player.position);
+
+        // Reset spacing reference to the new player position so the next commit
+        // happens after a full pointSpacing of new movement
+        lastCommittedPos = player.position;
+    }
+
+    void CommitPoint(Vector3 worldPos)
+    {
+        int newIndex = lr.positionCount;
+        lr.positionCount = newIndex + 1;
+        lr.SetPosition(newIndex, worldPos);
+        lastCommittedPos = worldPos;
+    }
+
+    void AppendLivePoint(Vector3 worldPos)
+    {
+        int newIndex = lr.positionCount;
+        lr.positionCount = newIndex + 1;
+        lr.SetPosition(newIndex, worldPos);
     }
 }
