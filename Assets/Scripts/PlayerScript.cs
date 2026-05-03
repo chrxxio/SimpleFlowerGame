@@ -66,9 +66,6 @@ public class PlayerController : MonoBehaviour {
 
                 LogDiagnostic("PRE-WRAP", oldFace);
 
-                // Compute corner BEFORE rotating the player, since we need the player's
-                // current Y position in tower-local space (which is preserved through
-                // the wrap, but cleaner to compute once here)
                 Vector3 cornerPos = ComputeCornerWorldPos(oldFace, newFace);
 
                 WrapAroundTower(crossDirection);
@@ -109,7 +106,6 @@ public class PlayerController : MonoBehaviour {
         if (currentFace != -1) {
             SnapToFace(currentFace);
         } else {
-            // First frame: auto-detect the initial face
             currentFace = SnapToTowerSurface();
         }
     }
@@ -118,18 +114,69 @@ public class PlayerController : MonoBehaviour {
         float distance = motion.magnitude;
         if (distance < 0.0001f) return Vector3.zero;
 
-        Vector3 direction = motion / distance;
         float radius = sphere.radius * transform.lossyScale.x;
         Vector3 origin = transform.position + sphere.center;
 
-        if (Physics.SphereCast(origin, radius, direction, out RaycastHit hit,
-                               distance + skinWidth, obstacleLayers,
-                               QueryTriggerInteraction.Ignore)) {
-            float allowed = Mathf.Max(0f, hit.distance - skinWidth);
-            return direction * allowed;
+        // Try full motion first
+        if (CanMove(origin, motion, radius)) {
+            return motion;
         }
 
-        return motion;
+        // Build face-local axes
+        Vector3 faceNormal = GetCurrentFaceNormalWorld();
+        if (faceNormal == Vector3.zero) {
+            // No face context (shouldn't happen during gameplay) — just stop
+            return Vector3.zero;
+        }
+
+        Vector3 faceUp = tower.up;
+        Vector3 faceRight = Vector3.Cross(faceUp, faceNormal).normalized;
+
+        // Decompose motion into face-local components
+        float upAmount = Vector3.Dot(motion, faceUp);
+        float rightAmount = Vector3.Dot(motion, faceRight);
+
+        // Try only the vertical (up) component
+        Vector3 upMotion = faceUp * upAmount;
+        if (Mathf.Abs(upAmount) > 0.0001f && CanMove(origin, upMotion, radius)) {
+            return upMotion;
+        }
+
+        // Try only the horizontal (right) component
+        Vector3 rightMotion = faceRight * rightAmount;
+        if (Mathf.Abs(rightAmount) > 0.0001f && CanMove(origin, rightMotion, radius)) {
+            return rightMotion;
+        }
+
+        // Both axes blocked — don't move
+        return Vector3.zero;
+    }
+
+    bool CanMove(Vector3 origin, Vector3 motion, float radius) {
+        float dist = motion.magnitude;
+        if (dist < 0.0001f) return true;
+
+        Vector3 dir = motion / dist;
+        return !Physics.SphereCast(origin, radius, dir, out _,
+                                    dist + skinWidth, obstacleLayers,
+                                    QueryTriggerInteraction.Ignore);
+    }
+
+    /// <summary>
+    /// Returns the world-space outward normal of the current face.
+    /// </summary>
+    Vector3 GetCurrentFaceNormalWorld() {
+        if (currentFace == -1 || tower == null) return Vector3.zero;
+
+        Vector3 localNormal;
+        switch (currentFace) {
+            case 0: localNormal = Vector3.right; break;
+            case 1: localNormal = Vector3.left; break;
+            case 2: localNormal = Vector3.forward; break;
+            case 3: localNormal = Vector3.back; break;
+            default: return Vector3.zero;
+        }
+        return tower.TransformDirection(localNormal);
     }
 
     /// <summary>
@@ -235,10 +282,6 @@ public class PlayerController : MonoBehaviour {
         return new Bounds(Vector3.zero, Vector3.one);
     }
 
-    /// <summary>
-    /// Computes the world-space position of the corner edge between two faces, at the
-    /// player's current local Y. Used by StemTrail to bend the line cleanly at corners.
-    /// </summary>
     Vector3 ComputeCornerWorldPos(int oldFace, int newFace) {
         Bounds localBounds = GetTowerLocalBounds();
         Vector3 center = localBounds.center;
@@ -247,15 +290,12 @@ public class PlayerController : MonoBehaviour {
         Vector3 playerLocal = tower.InverseTransformPoint(transform.position);
         float localY = playerLocal.y;
 
-        // Determine corner X and Z signs based on which faces are involved
         bool cornerPlusX = (oldFace == 0 || newFace == 0);
         bool cornerPlusZ = (oldFace == 2 || newFace == 2);
 
         float cornerX = (cornerPlusX ? extents.x : -extents.x) + center.x;
         float cornerZ = (cornerPlusZ ? extents.z : -extents.z) + center.z;
 
-        // Push outward by player radius along both axes so the corner sits at the
-        // same effective distance from the tower as the player's surface
         float xPush = playerRadius / tower.lossyScale.x * (cornerPlusX ? 1f : -1f);
         float zPush = playerRadius / tower.lossyScale.z * (cornerPlusZ ? 1f : -1f);
 
