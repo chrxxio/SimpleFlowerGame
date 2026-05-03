@@ -10309,12 +10309,20 @@ PrefabInstance:
       propertyPath: orthographic size
       value: 3.8
       objectReference: {fileID: 0}
+    - target: {fileID: 3874997905406094220, guid: 490d60f8ba349a14fbab9b8a1eb37b82, type: 3}
+      propertyPath: m_OcclusionCulling
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 4512075312192941122, guid: 490d60f8ba349a14fbab9b8a1eb37b82, type: 3}
       propertyPath: target
       value: 
       objectReference: {fileID: 1218821069}
     - target: {fileID: 4512075312192941122, guid: 490d60f8ba349a14fbab9b8a1eb37b82, type: 3}
       propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7070586482310398326, guid: 490d60f8ba349a14fbab9b8a1eb37b82, type: 3}
+      propertyPath: m_RenderShadows
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7324960568744008507, guid: 490d60f8ba349a14fbab9b8a1eb37b82, type: 3}
