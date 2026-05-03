@@ -12,6 +12,8 @@ public class FlowerMagnet : MonoBehaviour
     public CameraFlowerOrbit flowerOrbitCam;
     public Camera mainCamera;
 
+    public GameObject[] objects;
+
     [Header("Camera Timing")]
     public float cameraSwitchDelay = 1.5f;
 
@@ -46,14 +48,14 @@ public class FlowerMagnet : MonoBehaviour
     void SwitchToOrthoZoomOut()
     {
         if (mainCamera == null) return;
-
+        TurnOffAll();
         mainCamera.orthographic = true;
 
         // 🎯 POSITION (pull back + lift up)
         mainCamera.transform.position = new Vector3(
             player.position.x,
             player.position.y + 6f,   // height
-            player.position.z - 10f    // pull back
+            - 10f    // pull back
         );
 
         // 🎯 ROTATION (tilt toward horizon)
@@ -137,4 +139,14 @@ public class FlowerMagnet : MonoBehaviour
 
         Debug.Log("🎥 CAMERA SWITCHED AFTER SNAP");
     }
+
+    void TurnOffAll()
+    {
+        foreach (GameObject obj in objects)
+        {
+            if (obj != null)
+                obj.SetActive(false);
+        }
+    }
+
 }

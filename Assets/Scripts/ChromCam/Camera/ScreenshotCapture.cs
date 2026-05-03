@@ -7,6 +7,7 @@ public class ScreenshotCapture : MonoBehaviour
     public CameraFlowerOrbit orbitCam;
     public GameObject saveButtonUI;
     public GameObject savedPopup;
+    public GameObject mainMenuButton;
 
     private bool readyToCapture = false;
     private bool hasCaptured = false;
@@ -48,7 +49,7 @@ public class ScreenshotCapture : MonoBehaviour
 
         if (saveButtonUI != null)
             saveButtonUI.SetActive(false);
-
+        
         StartCoroutine(Capture());
     }
 
@@ -84,6 +85,7 @@ public class ScreenshotCapture : MonoBehaviour
     }
     void HidePopup()
     {
+        mainMenuButton.SetActive(true);
         if (savedPopup != null)
             savedPopup.SetActive(false);
     }
